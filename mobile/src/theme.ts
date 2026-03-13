@@ -28,6 +28,14 @@ export const palette = {
   metricCard: '#F4EEE3',
   track: '#E5DAC8',
   sectionEyebrow: '#7E6E5A',
+  protocolCard: '#F5EBDD',
+  protocolBorder: '#DCC8A8',
+  protocolStep: '#6F5B43',
+  supportSurface: '#FFF3E1',
+  supportBorder: '#E2C69D',
+  supportAccent: '#7B4A19',
+  guideBorder: 'rgba(255, 255, 255, 0.72)',
+  guideFill: 'rgba(255, 255, 255, 0.1)',
 } as const;
 
 

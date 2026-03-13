@@ -10,7 +10,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -96,6 +95,25 @@ function ScoreBar({ label, value, accentColor }: { label: string; value: number;
 }
 
 
+function ProtocolStep({
+  step,
+  title,
+  detail,
+}: {
+  step: string;
+  title: string;
+  detail: string;
+}) {
+  return (
+    <View style={styles.protocolCard}>
+      <Text style={styles.protocolStep}>{step}</Text>
+      <Text style={styles.protocolTitle}>{title}</Text>
+      <Text style={styles.protocolDetail}>{detail}</Text>
+    </View>
+  );
+}
+
+
 export default function App() {
   const [fontsLoaded] = useFonts({
     Manrope_500Medium,
@@ -107,8 +125,6 @@ export default function App() {
   const [facing, setFacing] = useState<CameraType>('back');
   const cameraRef = useRef<CameraView | null>(null);
   const [photo, setPhoto] = useState<CameraCapturedPicture | null>(null);
-  const [apiUrl, setApiUrl] = useState(DEFAULT_API_URL);
-  const [showSettings, setShowSettings] = useState(false);
   const [healthInfo, setHealthInfo] = useState<HealthResponse | null>(null);
   const [apiStatus, setApiStatus] = useState('Verification du backend...');
   const [apiHealthy, setApiHealthy] = useState<boolean | null>(null);
@@ -116,6 +132,7 @@ export default function App() {
   const [isTestingApi, setIsTestingApi] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const apiUrl = DEFAULT_API_URL;
 
   const resultTone = result ? diseaseThemes[result.predicted_class] ?? diseaseThemes.default : diseaseThemes.default;
   const sortedScores = result
@@ -152,8 +169,8 @@ export default function App() {
       setApiHealthy(true);
       setApiStatus(
         health.cohere_enabled
-          ? `Backend en ligne • ${health.classes.length} classes • Cohere actif`
-          : `Backend en ligne • ${health.classes.length} classes`
+          ? `Backend en ligne - ${health.classes.length} classes - Cohere actif`
+          : `Backend en ligne - ${health.classes.length} classes`
       );
     } catch (error) {
       setHealthInfo(null);
@@ -263,14 +280,14 @@ export default function App() {
                   <Text style={styles.kicker}>AgriSmart Vision</Text>
                   <Text style={styles.title}>Analyse feuille</Text>
                 </View>
-                <Pressable style={styles.settingsToggle} onPress={() => setShowSettings((current) => !current)}>
-                  <Text style={styles.settingsToggleText}>{showSettings ? 'Fermer' : 'Reglages'}</Text>
-                </Pressable>
+                <View style={styles.heroStamp}>
+                  <Text style={styles.heroStampText}>Mobile ready</Text>
+                </View>
               </View>
 
               <Text style={styles.subtitle}>
-                Une interface mobile propre pour capturer une feuille de mais, lancer le modele
-                final et afficher un diagnostic plus clair.
+                Une interface mobile moderne pour capturer une feuille de mais, lancer le modele
+                final et restituer un diagnostic clair avec commentaire IA.
               </Text>
 
               <View style={styles.heroPills}>
@@ -293,35 +310,44 @@ export default function App() {
               <Text style={styles.heroFootnote}>{apiStatus}</Text>
             </LinearGradient>
 
-            {showSettings || apiHealthy === false ? (
-              <View style={styles.settingsCard}>
+            <View style={styles.protocolRow}>
+              <ProtocolStep
+                step="01"
+                title="Capturer"
+                detail="Cadrez une seule feuille dans la zone guidee pour une lecture plus stable."
+              />
+              <ProtocolStep
+                step="02"
+                title="Predire"
+                detail="Le modele TFLite estime la classe et le niveau de confiance."
+              />
+              <ProtocolStep
+                step="03"
+                title="Commenter"
+                detail="Le backend ajoute un commentaire local ou Cohere selon la configuration."
+              />
+            </View>
+
+            {apiHealthy === false ? (
+              <View style={styles.supportCard}>
                 <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>Parametres techniques</Text>
+                  <Text style={styles.sectionTitle}>Assistance backend</Text>
                   <Pressable style={styles.inlineAction} onPress={() => void runHealthCheck()}>
                     <Text style={styles.inlineActionText}>
-                      {isTestingApi ? 'Verification...' : 'Verifier'}
+                      {isTestingApi ? 'Verification...' : 'Retester'}
                     </Text>
                   </Pressable>
                 </View>
 
                 <Text style={styles.helperText}>
-                  Le champ reste modifiable en secours, mais l'application vise maintenant un
-                  backend en ligne par defaut.
+                  Le backend public ne repond pas encore. L application reste deja pointee vers
+                  l URL finale, sans saisie manuelle cote utilisateur.
                 </Text>
 
-                <TextInput
-                  value={apiUrl}
-                  onChangeText={setApiUrl}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  style={styles.input}
-                  placeholder={DEFAULT_API_URL}
-                  placeholderTextColor={palette.inputHint}
-                />
-
-                <Text style={styles.settingsHint}>
-                  URL attendue : `https://juniorleriche-agrismart-api.hf.space`
-                </Text>
+                <View style={styles.supportUrlBox}>
+                  <Text style={styles.supportUrlLabel}>URL backend</Text>
+                  <Text style={styles.supportUrlText}>{apiUrl}</Text>
+                </View>
               </View>
             ) : null}
 
@@ -338,6 +364,7 @@ export default function App() {
 
               <View style={styles.cameraShell}>
                 {renderCameraContent()}
+                <View pointerEvents="none" style={styles.focusFrame} />
 
                 <LinearGradient colors={palette.cameraOverlay} style={styles.cameraOverlay}>
                   <View style={styles.cameraOverlayTop}>
@@ -550,26 +577,55 @@ const styles = StyleSheet.create({
     fontFamily: 'Manrope_700Bold',
     fontSize: 12,
   },
-  settingsToggle: {
+  heroStamp: {
     borderRadius: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.16)',
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  settingsToggleText: {
+  heroStampText: {
     fontFamily: 'Manrope_700Bold',
     fontSize: 12,
     color: palette.heroTitle,
   },
-  settingsCard: {
-    backgroundColor: palette.card,
+  protocolRow: {
+    gap: 12,
+  },
+  protocolCard: {
+    backgroundColor: palette.protocolCard,
+    borderRadius: 24,
+    padding: 18,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: palette.protocolBorder,
+  },
+  protocolStep: {
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 12,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: palette.protocolStep,
+  },
+  protocolTitle: {
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 20,
+    color: palette.text,
+  },
+  protocolDetail: {
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 14,
+    lineHeight: 21,
+    color: palette.subtleText,
+  },
+  supportCard: {
+    backgroundColor: palette.supportSurface,
     borderRadius: 24,
     padding: 18,
     gap: 12,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: palette.supportBorder,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -595,22 +651,25 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: palette.subtleText,
   },
-  input: {
-    backgroundColor: palette.input,
-    borderWidth: 1,
-    borderColor: palette.inputBorder,
+  supportUrlBox: {
+    backgroundColor: 'rgba(255, 255, 255, 0.52)',
     borderRadius: 18,
     paddingHorizontal: 14,
-    paddingVertical: 13,
-    fontFamily: 'Manrope_600SemiBold',
-    fontSize: 15,
-    color: palette.text,
+    paddingVertical: 14,
+    gap: 4,
   },
-  settingsHint: {
-    fontFamily: 'Manrope_500Medium',
+  supportUrlLabel: {
+    fontFamily: 'Manrope_700Bold',
     fontSize: 12,
-    lineHeight: 18,
-    color: palette.subtleText,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    color: palette.supportAccent,
+  },
+  supportUrlText: {
+    fontFamily: 'Manrope_600SemiBold',
+    fontSize: 14,
+    lineHeight: 21,
+    color: palette.text,
   },
   inlineAction: {
     paddingHorizontal: 12,
@@ -655,6 +714,17 @@ const styles = StyleSheet.create({
   },
   cameraPreview: {
     flex: 1,
+  },
+  focusFrame: {
+    position: 'absolute',
+    top: '18%',
+    left: '12%',
+    right: '12%',
+    bottom: '20%',
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: palette.guideBorder,
+    backgroundColor: palette.guideFill,
   },
   cameraOverlay: {
     ...StyleSheet.absoluteFillObject,
