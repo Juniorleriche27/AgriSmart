@@ -31,19 +31,23 @@ jobs:
       - name: Push to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_XET_HIGH_PERFORMANCE: 1
         run: |
           if [ -z "$HF_TOKEN" ]; then
             echo "HF_TOKEN is missing"
             exit 1
           fi
-          rm -rf .hf-space-publish
-          git clone https://Juniorleriche:${HF_TOKEN}@huggingface.co/spaces/Juniorleriche/agrismart-api .hf-space-publish
-          find .hf-space-publish -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
-          cp -r .hf-space-build/. .hf-space-publish/
-          cd .hf-space-publish
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .
-          git diff --cached --quiet && echo "No changes to sync" && exit 0
-          git commit -m "Sync from GitHub"
-          git push origin HEAD:main
+          python -m pip install --upgrade "huggingface_hub"
+          python <<'PY'
+          import os
+          from huggingface_hub import HfApi
+
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          api.upload_folder(
+              folder_path=".hf-space-build",
+              repo_id="Juniorleriche/agrismart-api",
+              repo_type="space",
+              commit_message="Sync from GitHub",
+          )
+          print("Space sync completed")
+          PY
