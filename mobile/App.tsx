@@ -4,6 +4,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   SafeAreaView,
@@ -125,6 +126,7 @@ export default function App() {
   const [facing, setFacing] = useState<CameraType>('back');
   const cameraRef = useRef<CameraView | null>(null);
   const [photo, setPhoto] = useState<CameraCapturedPicture | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [healthInfo, setHealthInfo] = useState<HealthResponse | null>(null);
   const [apiStatus, setApiStatus] = useState('Verification du backend...');
   const [apiHealthy, setApiHealthy] = useState<boolean | null>(null);
@@ -151,11 +153,29 @@ export default function App() {
     setFacing((current) => (current === 'back' ? 'front' : 'back'));
   };
 
-  const handleRequestPermission = async () => {
+  const ensureCameraPermission = async () => {
     const response = await requestPermission();
     if (!response.granted) {
       Alert.alert('Permission requise', "L'application doit acceder a la camera pour fonctionner.");
+      return false;
     }
+    return true;
+  };
+
+  const openCamera = async () => {
+    if (permission?.granted) {
+      setCameraOpen(true);
+      return;
+    }
+
+    const granted = await ensureCameraPermission();
+    if (granted) {
+      setCameraOpen(true);
+    }
+  };
+
+  const handleRequestPermission = async () => {
+    await ensureCameraPermission();
   };
 
   const runHealthCheck = async (silent = false) => {
@@ -197,6 +217,7 @@ export default function App() {
       });
 
       setPhoto(captured);
+      setCameraOpen(false);
     } catch (error) {
       Alert.alert('Capture impossible', "La photo n'a pas pu etre prise.");
     } finally {
@@ -207,6 +228,7 @@ export default function App() {
   const handleRetake = () => {
     setPhoto(null);
     setResult(null);
+    void openCamera();
   };
 
   const handleAnalyze = async () => {
@@ -226,7 +248,7 @@ export default function App() {
     }
   };
 
-  const renderCameraContent = () => {
+  const renderCapturePreview = () => {
     if (!permission) {
       return (
         <View style={styles.centerState}>
@@ -236,12 +258,16 @@ export default function App() {
       );
     }
 
+    if (photo?.uri) {
+      return <Image source={{ uri: photo.uri }} style={styles.cameraPreview} resizeMode="cover" />;
+    }
+
     if (!permission.granted) {
       return (
         <LinearGradient colors={palette.cameraGradient} style={styles.centerState}>
           <Text style={styles.stateTitle}>Camera non autorisee</Text>
           <Text style={styles.stateText}>
-            Autorisez la camera pour photographier une feuille et lancer l'analyse.
+            Autorisez la camera pour photographier une feuille, puis ouvrez la capture en plein ecran.
           </Text>
           <Pressable style={styles.permissionButton} onPress={handleRequestPermission}>
             <Text style={styles.permissionButtonText}>Autoriser la camera</Text>
@@ -250,11 +276,14 @@ export default function App() {
       );
     }
 
-    if (photo?.uri) {
-      return <Image source={{ uri: photo.uri }} style={styles.cameraPreview} resizeMode="cover" />;
-    }
-
-    return <CameraView ref={cameraRef} style={styles.cameraPreview} facing={facing} mute />;
+    return (
+      <LinearGradient colors={palette.cameraGradient} style={styles.centerState}>
+        <Text style={styles.stateTitle}>Camera prete</Text>
+        <Text style={styles.stateText}>
+          Ouvrez la camera en plein ecran pour prendre une photo sans bloquer les boutons.
+        </Text>
+      </LinearGradient>
+    );
   };
 
   if (!fontsLoaded) {
@@ -355,53 +384,30 @@ export default function App() {
               <View style={styles.sectionHeaderRow}>
                 <View>
                   <Text style={styles.sectionEyebrow}>Capture</Text>
-                  <Text style={styles.sectionTitle}>Camera en direct</Text>
+                  <Text style={styles.sectionTitle}>Photo de la feuille</Text>
                 </View>
-                <Pressable style={styles.inlineGhost} onPress={photo ? handleRetake : handleFlipCamera}>
-                  <Text style={styles.inlineGhostText}>{photo ? 'Reprendre' : 'Tourner'}</Text>
+                <Pressable style={styles.inlineGhost} onPress={photo ? handleRetake : openCamera}>
+                  <Text style={styles.inlineGhostText}>{photo ? 'Reprendre' : 'Ouvrir'}</Text>
                 </Pressable>
               </View>
 
               <View style={styles.cameraShell}>
-                {renderCameraContent()}
+                {renderCapturePreview()}
                 <View pointerEvents="none" style={styles.focusFrame} />
-
-                <LinearGradient colors={palette.cameraOverlay} style={styles.cameraOverlay}>
-                  <View style={styles.cameraOverlayTop}>
-                    <StatusPill label="Capture live" tone="neutral" />
-                    <StatusPill
-                      label={result ? result.predicted_label : 'Mode detection'}
-                      tone={result ? 'success' : 'neutral'}
-                    />
-                  </View>
-
-                  <View style={styles.cameraOverlayBottom}>
-                    <Text style={styles.cameraHint}>
-                      {photo
-                        ? 'Photo capturee. Lancez maintenant l analyse.'
-                        : 'Cadrez une seule feuille pour un resultat plus stable.'}
-                    </Text>
-                  </View>
-                </LinearGradient>
               </View>
+
+              <Text style={styles.captureHelper}>
+                {photo
+                  ? 'La photo est prete. Vous pouvez relancer la camera ou analyser directement.'
+                  : 'La camera s ouvre maintenant en plein ecran pour une prise de vue plus fiable sur Android.'}
+              </Text>
 
               <View style={styles.captureRow}>
                 <Pressable
-                  style={[styles.minorButton, isCapturing && styles.buttonDisabled]}
-                  onPress={photo ? handleRetake : handleFlipCamera}
-                  disabled={isCapturing}
+                  style={styles.minorButton}
+                  onPress={photo ? handleRetake : openCamera}
                 >
-                  <Text style={styles.minorButtonText}>{photo ? 'Nouvelle photo' : 'Changer vue'}</Text>
-                </Pressable>
-
-                <Pressable
-                  style={[styles.captureButton, (isCapturing || Boolean(photo)) && styles.buttonDisabled]}
-                  onPress={handleTakePhoto}
-                  disabled={isCapturing || Boolean(photo)}
-                >
-                  <View style={styles.captureButtonInner}>
-                    <Text style={styles.captureButtonText}>{isCapturing ? '...' : 'Prendre'}</Text>
-                  </View>
+                  <Text style={styles.minorButtonText}>{photo ? 'Nouvelle photo' : 'Ouvrir la camera'}</Text>
                 </Pressable>
 
                 <Pressable
@@ -414,17 +420,68 @@ export default function App() {
               </View>
 
               <Pressable
-                style={[styles.primaryAction, (!photo || isAnalyzing) && styles.buttonDisabled]}
-                onPress={handleAnalyze}
-                disabled={!photo || isAnalyzing}
+                style={[styles.primaryAction, isCapturing && styles.buttonDisabled]}
+                onPress={openCamera}
+                disabled={isCapturing}
               >
                 <LinearGradient colors={palette.primaryButtonGradient} style={styles.primaryActionFill}>
                   <Text style={styles.primaryActionText}>
-                    {isAnalyzing ? 'Analyse en cours...' : 'Lancer le diagnostic complet'}
+                    {photo ? 'Reprendre une photo' : 'Ouvrir la camera en plein ecran'}
                   </Text>
                 </LinearGradient>
               </Pressable>
             </View>
+
+            <Modal
+              visible={cameraOpen}
+              animationType="slide"
+              presentationStyle="fullScreen"
+              onRequestClose={() => setCameraOpen(false)}
+            >
+              <View style={styles.modalScreen}>
+                <View style={styles.modalHeader}>
+                  <Pressable style={styles.modalChip} onPress={() => setCameraOpen(false)}>
+                    <Text style={styles.modalChipText}>Fermer</Text>
+                  </Pressable>
+                  <Pressable style={styles.modalChip} onPress={handleFlipCamera}>
+                    <Text style={styles.modalChipText}>Tourner</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.modalPreviewShell}>
+                  {permission?.granted ? (
+                    <CameraView ref={cameraRef} style={styles.modalPreview} facing={facing} mute />
+                  ) : (
+                    <LinearGradient colors={palette.cameraGradient} style={styles.centerState}>
+                      <Text style={styles.stateTitle}>Camera indisponible</Text>
+                      <Text style={styles.stateText}>
+                        Autorisez la camera pour continuer la capture.
+                      </Text>
+                      <Pressable style={styles.permissionButton} onPress={handleRequestPermission}>
+                        <Text style={styles.permissionButtonText}>Autoriser la camera</Text>
+                      </Pressable>
+                    </LinearGradient>
+                  )}
+                  <View pointerEvents="none" style={styles.modalFocusFrame} />
+                </View>
+
+                <View style={styles.modalFooter}>
+                  <Text style={styles.modalHint}>
+                    Cadrez une seule feuille bien visible, puis appuyez sur le bouton central.
+                  </Text>
+
+                  <Pressable
+                    style={[styles.modalCaptureButton, isCapturing && styles.buttonDisabled]}
+                    onPress={handleTakePhoto}
+                    disabled={isCapturing}
+                  >
+                    <View style={styles.modalCaptureButtonInner}>
+                      <Text style={styles.captureButtonText}>{isCapturing ? '...' : 'Prendre'}</Text>
+                    </View>
+                  </Pressable>
+                </View>
+              </View>
+            </Modal>
 
             {result ? (
               <View style={styles.resultStack}>
@@ -715,6 +772,12 @@ const styles = StyleSheet.create({
   cameraPreview: {
     flex: 1,
   },
+  captureHelper: {
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 14,
+    lineHeight: 21,
+    color: '#D7DBD4',
+  },
   focusFrame: {
     position: 'absolute',
     top: '18%',
@@ -822,6 +885,82 @@ const styles = StyleSheet.create({
     fontFamily: 'Manrope_700Bold',
     fontSize: 12,
     color: '#FFF8F0',
+  },
+  modalScreen: {
+    flex: 1,
+    backgroundColor: palette.darkShell,
+    paddingTop: 18,
+    paddingHorizontal: 18,
+    paddingBottom: 24,
+    gap: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  modalChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: palette.darkShellBorder,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  modalChipText: {
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 13,
+    color: '#F5F2EA',
+  },
+  modalPreviewShell: {
+    flex: 1,
+    borderRadius: 30,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#0B1310',
+  },
+  modalPreview: {
+    flex: 1,
+  },
+  modalFocusFrame: {
+    position: 'absolute',
+    top: '16%',
+    left: '10%',
+    right: '10%',
+    bottom: '18%',
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: palette.guideBorder,
+    backgroundColor: palette.guideFill,
+  },
+  modalFooter: {
+    alignItems: 'center',
+    gap: 16,
+    paddingBottom: Platform.OS === 'ios' ? 12 : 0,
+  },
+  modalHint: {
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+    color: '#D7DBD4',
+  },
+  modalCaptureButton: {
+    width: 104,
+    height: 104,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F2E8D8',
+  },
+  modalCaptureButtonInner: {
+    width: 78,
+    height: 78,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.captureInner,
   },
   primaryAction: {
     borderRadius: 20,
