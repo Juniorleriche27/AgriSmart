@@ -43,5 +43,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .
           git commit -m "Sync from GitHub"
-          git remote add origin https://__token__:${HF_TOKEN}@huggingface.co/spaces/Juniorleriche/agrismart-api
+          git remote add origin https://Juniorleriche:${HF_TOKEN}@huggingface.co/spaces/Juniorleriche/agrismart-api
           git push --force origin HEAD:main
