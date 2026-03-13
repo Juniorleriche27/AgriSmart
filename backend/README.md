@@ -13,6 +13,11 @@ API locale `FastAPI` pour la soutenance.
 - `GET /health` : verifie que l'API et le modele sont charges
 - `POST /predict` : recoit une image et renvoie la prediction
 
+## Variables d'environnement optionnelles
+
+- `COHERE_API_KEY` : active un commentaire genere par Cohere
+- `COHERE_MODEL` : permet de changer le modele Cohere
+
 ## Exemple de test rapide
 
 ```powershell

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,14 +14,73 @@ import {
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
 import { CameraType, CameraView, type CameraCapturedPicture, useCameraPermissions } from 'expo-camera';
+import {
+  Manrope_500Medium,
+  Manrope_600SemiBold,
+  Manrope_700Bold,
+  Manrope_800ExtraBold,
+  useFonts,
+} from '@expo-google-fonts/manrope';
 
-import { checkApiHealth, predictLeaf, type PredictionResponse } from './src/api';
-import { DEFAULT_API_URL, palette } from './src/theme';
+import { checkApiHealth, predictLeaf, type HealthResponse, type PredictionResponse } from './src/api';
+import { DEFAULT_API_URL, diseaseThemes, palette } from './src/theme';
 
 
-function ScoreBar({ label, value }: { label: string; value: number }) {
-  const width = `${Math.max(6, Math.round(value * 100))}%` as const;
+function StatusPill({
+  label,
+  tone = 'neutral',
+}: {
+  label: string;
+  tone?: 'success' | 'warning' | 'neutral';
+}) {
+  const toneStyles = {
+    success: {
+      backgroundColor: 'rgba(125, 186, 93, 0.18)',
+      borderColor: 'rgba(171, 232, 120, 0.32)',
+      textColor: '#F4FFE8',
+    },
+    warning: {
+      backgroundColor: 'rgba(244, 179, 80, 0.18)',
+      borderColor: 'rgba(255, 219, 142, 0.34)',
+      textColor: '#FFF6E1',
+    },
+    neutral: {
+      backgroundColor: 'rgba(255, 255, 255, 0.12)',
+      borderColor: 'rgba(255, 255, 255, 0.18)',
+      textColor: '#F7F4EE',
+    },
+  }[tone];
+
+  return (
+    <View
+      style={[
+        styles.statusPill,
+        {
+          backgroundColor: toneStyles.backgroundColor,
+          borderColor: toneStyles.borderColor,
+        },
+      ]}
+    >
+      <Text style={[styles.statusPillText, { color: toneStyles.textColor }]}>{label}</Text>
+    </View>
+  );
+}
+
+
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.metricCard}>
+      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={styles.metricLabel}>{label}</Text>
+    </View>
+  );
+}
+
+
+function ScoreBar({ label, value, accentColor }: { label: string; value: number; accentColor: string }) {
+  const width = `${Math.max(8, Math.round(value * 100))}%` as const;
 
   return (
     <View style={styles.scoreRow}>
@@ -30,7 +89,7 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
         <Text style={styles.scoreValue}>{Math.round(value * 100)}%</Text>
       </View>
       <View style={styles.scoreTrack}>
-        <View style={[styles.scoreFill, { width }]} />
+        <View style={[styles.scoreFill, { width, backgroundColor: accentColor }]} />
       </View>
     </View>
   );
@@ -38,20 +97,38 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
 
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+    Manrope_800ExtraBold,
+  });
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<CameraType>('back');
   const cameraRef = useRef<CameraView | null>(null);
   const [photo, setPhoto] = useState<CameraCapturedPicture | null>(null);
   const [apiUrl, setApiUrl] = useState(DEFAULT_API_URL);
-  const [apiStatus, setApiStatus] = useState('API non testee');
+  const [showSettings, setShowSettings] = useState(false);
+  const [healthInfo, setHealthInfo] = useState<HealthResponse | null>(null);
+  const [apiStatus, setApiStatus] = useState('Verification du backend...');
+  const [apiHealthy, setApiHealthy] = useState<boolean | null>(null);
   const [result, setResult] = useState<PredictionResponse | null>(null);
   const [isTestingApi, setIsTestingApi] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  const resultTone = result ? diseaseThemes[result.predicted_class] ?? diseaseThemes.default : diseaseThemes.default;
   const sortedScores = result
     ? Object.entries(result.scores).sort((left, right) => right[1] - left[1])
     : [];
+
+  useEffect(() => {
+    if (!fontsLoaded) {
+      return;
+    }
+
+    void runHealthCheck(true);
+  }, [fontsLoaded]);
 
   const handleFlipCamera = () => {
     setFacing((current) => (current === 'back' ? 'front' : 'back'));
@@ -60,7 +137,32 @@ export default function App() {
   const handleRequestPermission = async () => {
     const response = await requestPermission();
     if (!response.granted) {
-      Alert.alert('Permission requise', "L'application doit acceder a la camera pour la demonstration.");
+      Alert.alert('Permission requise', "L'application doit acceder a la camera pour fonctionner.");
+    }
+  };
+
+  const runHealthCheck = async (silent = false) => {
+    try {
+      if (!silent) {
+        setIsTestingApi(true);
+      }
+
+      const health = await checkApiHealth(apiUrl);
+      setHealthInfo(health);
+      setApiHealthy(true);
+      setApiStatus(
+        health.cohere_enabled
+          ? `Backend en ligne • ${health.classes.length} classes • Cohere actif`
+          : `Backend en ligne • ${health.classes.length} classes`
+      );
+    } catch (error) {
+      setHealthInfo(null);
+      setApiHealthy(false);
+      setApiStatus(error instanceof Error ? error.message : 'Connexion impossible');
+    } finally {
+      if (!silent) {
+        setIsTestingApi(false);
+      }
     }
   };
 
@@ -73,9 +175,8 @@ export default function App() {
       setIsCapturing(true);
       setResult(null);
 
-      // La capture reste simple pour stabiliser la demo sur Expo Go.
       const captured = await cameraRef.current.takePictureAsync({
-        quality: 0.8,
+        quality: 0.9,
       });
 
       setPhoto(captured);
@@ -89,18 +190,6 @@ export default function App() {
   const handleRetake = () => {
     setPhoto(null);
     setResult(null);
-  };
-
-  const handleCheckApi = async () => {
-    try {
-      setIsTestingApi(true);
-      const health = await checkApiHealth(apiUrl);
-      setApiStatus(`API connectee. Classes: ${health.classes.join(', ')}`);
-    } catch (error) {
-      setApiStatus(error instanceof Error ? error.message : 'Connexion API impossible');
-    } finally {
-      setIsTestingApi(false);
-    }
   };
 
   const handleAnalyze = async () => {
@@ -124,7 +213,7 @@ export default function App() {
     if (!permission) {
       return (
         <View style={styles.centerState}>
-          <ActivityIndicator color={palette.leaf} size="large" />
+          <ActivityIndicator color={palette.leafBright} size="large" />
           <Text style={styles.stateText}>Preparation de la camera...</Text>
         </View>
       );
@@ -132,15 +221,15 @@ export default function App() {
 
     if (!permission.granted) {
       return (
-        <View style={styles.centerState}>
+        <LinearGradient colors={palette.cameraGradient} style={styles.centerState}>
           <Text style={styles.stateTitle}>Camera non autorisee</Text>
           <Text style={styles.stateText}>
-            Autorisez la camera pour prendre la photo de la feuille pendant la demonstration.
+            Autorisez la camera pour photographier une feuille et lancer l'analyse.
           </Text>
-          <Pressable style={styles.secondaryButton} onPress={handleRequestPermission}>
-            <Text style={styles.secondaryButtonText}>Autoriser la camera</Text>
+          <Pressable style={styles.permissionButton} onPress={handleRequestPermission}>
+            <Text style={styles.permissionButtonText}>Autoriser la camera</Text>
           </Pressable>
-        </View>
+        </LinearGradient>
       );
     }
 
@@ -148,309 +237,647 @@ export default function App() {
       return <Image source={{ uri: photo.uri }} style={styles.cameraPreview} resizeMode="cover" />;
     }
 
-    return (
-      <CameraView
-        ref={cameraRef}
-        style={styles.cameraPreview}
-        facing={facing}
-        mute
-      />
-    );
+    return <CameraView ref={cameraRef} style={styles.cameraPreview} facing={facing} mute />;
   };
 
+  if (!fontsLoaded) {
+    return (
+      <SafeAreaView style={styles.loadingScreen}>
+        <ActivityIndicator color={palette.leafDark} size="large" />
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" />
-      <KeyboardAvoidingView
-        style={styles.screen}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.heroCard}>
-            <Text style={styles.badge}>Prototype mobile</Text>
-            <Text style={styles.title}>AgriSmart</Text>
-            <Text style={styles.subtitle}>
-              Prenez une photo d&apos;une feuille de mais, envoyez-la au modele final et affichez le
-              diagnostic en direct.
-            </Text>
-          </View>
+    <LinearGradient colors={palette.screenGradient} style={styles.screenGradient}>
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="dark" />
+        <KeyboardAvoidingView
+          style={styles.screen}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+            <LinearGradient colors={palette.heroGradient} style={styles.heroCard}>
+              <View style={styles.heroHeader}>
+                <View style={styles.brandBlock}>
+                  <Text style={styles.kicker}>AgriSmart Vision</Text>
+                  <Text style={styles.title}>Analyse feuille</Text>
+                </View>
+                <Pressable style={styles.settingsToggle} onPress={() => setShowSettings((current) => !current)}>
+                  <Text style={styles.settingsToggleText}>{showSettings ? 'Fermer' : 'Reglages'}</Text>
+                </Pressable>
+              </View>
 
-          <View style={styles.panel}>
-            <Text style={styles.sectionTitle}>Connexion a l&apos;API</Text>
-            <Text style={styles.helperText}>
-              Entrez l&apos;adresse du laptop. Avec un hotspot Windows, l&apos;IP est souvent
-              `http://192.168.137.1:8010`.
-            </Text>
-            <TextInput
-              value={apiUrl}
-              onChangeText={setApiUrl}
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={styles.input}
-              placeholder="http://192.168.137.1:8010"
-              placeholderTextColor={palette.muted}
-            />
-            <Pressable
-              style={[styles.secondaryButton, isTestingApi && styles.buttonDisabled]}
-              onPress={handleCheckApi}
-              disabled={isTestingApi}
-            >
-              <Text style={styles.secondaryButtonText}>
-                {isTestingApi ? 'Test en cours...' : "Tester l'API"}
+              <Text style={styles.subtitle}>
+                Une interface mobile propre pour capturer une feuille de mais, lancer le modele
+                final et afficher un diagnostic plus clair.
               </Text>
-            </Pressable>
-            <Text style={styles.statusText}>{apiStatus}</Text>
-          </View>
 
-          <View style={styles.panel}>
-            <Text style={styles.sectionTitle}>Camera</Text>
-            <Text style={styles.helperText}>
-              Cadrez bien une seule feuille avant de prendre la photo.
-            </Text>
+              <View style={styles.heroPills}>
+                <StatusPill
+                  label={
+                    apiHealthy === null
+                      ? 'Connexion en cours'
+                      : apiHealthy
+                        ? 'Backend en ligne'
+                        : 'Backend indisponible'
+                  }
+                  tone={apiHealthy === false ? 'warning' : apiHealthy ? 'success' : 'neutral'}
+                />
+                <StatusPill
+                  label={healthInfo?.cohere_enabled ? 'Commentaire Cohere' : 'Commentaire local'}
+                  tone={healthInfo?.cohere_enabled ? 'success' : 'neutral'}
+                />
+              </View>
 
-            <View style={styles.cameraShell}>{renderCameraContent()}</View>
+              <Text style={styles.heroFootnote}>{apiStatus}</Text>
+            </LinearGradient>
 
-            <View style={styles.actionRow}>
-              <Pressable
-                style={[styles.secondaryButton, styles.actionButton]}
-                onPress={photo ? handleRetake : handleFlipCamera}
-              >
-                <Text style={styles.secondaryButtonText}>
-                  {photo ? 'Reprendre' : 'Changer camera'}
+            {showSettings || apiHealthy === false ? (
+              <View style={styles.settingsCard}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Parametres techniques</Text>
+                  <Pressable style={styles.inlineAction} onPress={() => void runHealthCheck()}>
+                    <Text style={styles.inlineActionText}>
+                      {isTestingApi ? 'Verification...' : 'Verifier'}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <Text style={styles.helperText}>
+                  Le champ reste modifiable en secours, mais l'application vise maintenant un
+                  backend en ligne par defaut.
                 </Text>
-              </Pressable>
+
+                <TextInput
+                  value={apiUrl}
+                  onChangeText={setApiUrl}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.input}
+                  placeholder={DEFAULT_API_URL}
+                  placeholderTextColor={palette.inputHint}
+                />
+
+                <Text style={styles.settingsHint}>
+                  URL attendue : `https://juniorleriche-agrismart-api.hf.space`
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.cameraCard}>
+              <View style={styles.sectionHeaderRow}>
+                <View>
+                  <Text style={styles.sectionEyebrow}>Capture</Text>
+                  <Text style={styles.sectionTitle}>Camera en direct</Text>
+                </View>
+                <Pressable style={styles.inlineGhost} onPress={photo ? handleRetake : handleFlipCamera}>
+                  <Text style={styles.inlineGhostText}>{photo ? 'Reprendre' : 'Tourner'}</Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.cameraShell}>
+                {renderCameraContent()}
+
+                <LinearGradient colors={palette.cameraOverlay} style={styles.cameraOverlay}>
+                  <View style={styles.cameraOverlayTop}>
+                    <StatusPill label="Capture live" tone="neutral" />
+                    <StatusPill
+                      label={result ? result.predicted_label : 'Mode detection'}
+                      tone={result ? 'success' : 'neutral'}
+                    />
+                  </View>
+
+                  <View style={styles.cameraOverlayBottom}>
+                    <Text style={styles.cameraHint}>
+                      {photo
+                        ? 'Photo capturee. Lancez maintenant l analyse.'
+                        : 'Cadrez une seule feuille pour un resultat plus stable.'}
+                    </Text>
+                  </View>
+                </LinearGradient>
+              </View>
+
+              <View style={styles.captureRow}>
+                <Pressable
+                  style={[styles.minorButton, isCapturing && styles.buttonDisabled]}
+                  onPress={photo ? handleRetake : handleFlipCamera}
+                  disabled={isCapturing}
+                >
+                  <Text style={styles.minorButtonText}>{photo ? 'Nouvelle photo' : 'Changer vue'}</Text>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.captureButton, (isCapturing || Boolean(photo)) && styles.buttonDisabled]}
+                  onPress={handleTakePhoto}
+                  disabled={isCapturing || Boolean(photo)}
+                >
+                  <View style={styles.captureButtonInner}>
+                    <Text style={styles.captureButtonText}>{isCapturing ? '...' : 'Prendre'}</Text>
+                  </View>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.minorButton, (!photo || isAnalyzing) && styles.buttonDisabled]}
+                  onPress={handleAnalyze}
+                  disabled={!photo || isAnalyzing}
+                >
+                  <Text style={styles.minorButtonText}>{isAnalyzing ? 'Analyse...' : 'Analyser'}</Text>
+                </Pressable>
+              </View>
 
               <Pressable
-                style={[styles.primaryButton, styles.actionButton, isCapturing && styles.buttonDisabled]}
-                onPress={handleTakePhoto}
-                disabled={isCapturing || Boolean(photo)}
+                style={[styles.primaryAction, (!photo || isAnalyzing) && styles.buttonDisabled]}
+                onPress={handleAnalyze}
+                disabled={!photo || isAnalyzing}
               >
-                <Text style={styles.primaryButtonText}>
-                  {isCapturing ? 'Capture...' : 'Prendre photo'}
-                </Text>
+                <LinearGradient colors={palette.primaryButtonGradient} style={styles.primaryActionFill}>
+                  <Text style={styles.primaryActionText}>
+                    {isAnalyzing ? 'Analyse en cours...' : 'Lancer le diagnostic complet'}
+                  </Text>
+                </LinearGradient>
               </Pressable>
             </View>
 
-            <Pressable
-              style={[styles.analyzeButton, (!photo || isAnalyzing) && styles.buttonDisabled]}
-              onPress={handleAnalyze}
-              disabled={!photo || isAnalyzing}
-            >
-              <Text style={styles.analyzeButtonText}>
-                {isAnalyzing ? 'Analyse en cours...' : 'Analyser la feuille'}
-              </Text>
-            </Pressable>
-          </View>
+            {result ? (
+              <View style={styles.resultStack}>
+                <View style={[styles.resultHero, { backgroundColor: resultTone.surface, borderColor: resultTone.border }]}>
+                  <View style={styles.resultHeroTop}>
+                    <View style={[styles.resultBadge, { backgroundColor: resultTone.badge }]}>
+                      <Text style={[styles.resultBadgeText, { color: resultTone.accent }]}>
+                        {resultTone.tag}
+                      </Text>
+                    </View>
+                    <View style={[styles.resultSourceChip, { borderColor: resultTone.border }]}>
+                      <Text style={styles.resultSourceText}>
+                        {result.commentary_source === 'cohere' ? 'Cohere' : 'Local'}
+                      </Text>
+                    </View>
+                  </View>
 
-          {result ? (
-            <View style={styles.resultCard}>
-              <Text style={styles.resultLabel}>Diagnostic</Text>
-              <Text style={styles.resultTitle}>{result.predicted_label}</Text>
-              <Text style={styles.resultMeta}>
-                Confiance: {Math.round(result.confidence * 100)}% | Inference: {result.inference_time_ms}
-                ms
-              </Text>
-              <Text style={styles.adviceTitle}>Conseil rapide</Text>
-              <Text style={styles.adviceText}>{result.advice}</Text>
+                  <Text style={styles.resultTitle}>{result.predicted_label}</Text>
+                  <Text style={styles.resultSubtitle}>
+                    La prediction finale est structuree pour une lecture immediate et une decision
+                    plus claire pendant la demonstration.
+                  </Text>
 
-              <Text style={styles.adviceTitle}>Scores par classe</Text>
-              {sortedScores.map(([label, value]) => (
-                <ScoreBar key={label} label={label} value={value} />
-              ))}
-            </View>
-          ) : null}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+                  <View style={styles.metricRow}>
+                    <MetricCard label="Confiance" value={`${Math.round(result.confidence * 100)}%`} />
+                    <MetricCard label="Inference" value={`${result.inference_time_ms} ms`} />
+                    <MetricCard
+                      label="Commentaire"
+                      value={result.commentary_source === 'cohere' ? 'Cohere' : 'Local'}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.cardGrid}>
+                  <View style={styles.detailCard}>
+                    <Text style={styles.detailCardTitle}>Commentaire intelligent</Text>
+                    <Text style={styles.detailCardText}>{result.commentary}</Text>
+                  </View>
+
+                  <View style={styles.detailCard}>
+                    <Text style={styles.detailCardTitle}>Action terrain</Text>
+                    <Text style={styles.detailCardText}>{result.advice}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.scoresCard}>
+                  <Text style={styles.detailCardTitle}>Probabilites par classe</Text>
+                  <Text style={styles.scoresIntro}>
+                    Le diagnostic montre aussi la repartition complete des scores du modele.
+                  </Text>
+                  {sortedScores.map(([label, value]) => (
+                    <ScoreBar key={label} label={label} value={value} accentColor={resultTone.accent} />
+                  ))}
+                </View>
+              </View>
+            ) : (
+              <View style={styles.placeholderCard}>
+                <Text style={styles.placeholderTitle}>Pret pour la demonstration</Text>
+                <Text style={styles.placeholderText}>
+                  Prenez une photo nette, lancez le diagnostic, puis presentez la confiance, le
+                  commentaire et la recommandation terrain.
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 
 const styles = StyleSheet.create({
+  screenGradient: {
+    flex: 1,
+  },
   safeArea: {
     flex: 1,
-    backgroundColor: palette.background,
   },
   screen: {
     flex: 1,
   },
+  loadingScreen: {
+    flex: 1,
+    backgroundColor: palette.loadingBackground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   content: {
     padding: 18,
-    gap: 16,
-    paddingBottom: 32,
+    gap: 18,
+    paddingBottom: 42,
   },
   heroCard: {
-    backgroundColor: palette.card,
-    borderRadius: 28,
-    padding: 22,
-    borderWidth: 1,
-    borderColor: palette.border,
+    borderRadius: 30,
+    padding: 24,
+    gap: 14,
+    shadowColor: '#0A1410',
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 7,
   },
-  badge: {
-    alignSelf: 'flex-start',
-    backgroundColor: palette.badge,
-    color: palette.leafDark,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
+  heroHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  brandBlock: {
+    flex: 1,
+    gap: 4,
+  },
+  kicker: {
+    fontFamily: 'Manrope_700Bold',
     fontSize: 12,
-    fontWeight: '700',
-    overflow: 'hidden',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: palette.kicker,
   },
   title: {
-    marginTop: 16,
+    fontFamily: 'Manrope_800ExtraBold',
     fontSize: 34,
-    fontWeight: '800',
-    color: palette.text,
+    color: palette.heroTitle,
   },
   subtitle: {
-    marginTop: 8,
+    fontFamily: 'Manrope_500Medium',
     fontSize: 15,
-    lineHeight: 22,
-    color: palette.subtleText,
+    lineHeight: 23,
+    color: palette.heroText,
   },
-  panel: {
+  heroPills: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  heroFootnote: {
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 13,
+    lineHeight: 18,
+    color: palette.heroSubtle,
+  },
+  statusPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  statusPillText: {
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 12,
+  },
+  settingsToggle: {
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  settingsToggleText: {
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 12,
+    color: palette.heroTitle,
+  },
+  settingsCard: {
     backgroundColor: palette.card,
     borderRadius: 24,
     padding: 18,
+    gap: 12,
     borderWidth: 1,
     borderColor: palette.border,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     gap: 12,
   },
+  sectionEyebrow: {
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
+    color: palette.sectionEyebrow,
+  },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 22,
     color: palette.text,
   },
   helperText: {
+    fontFamily: 'Manrope_500Medium',
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 21,
     color: palette.subtleText,
   },
   input: {
     backgroundColor: palette.input,
     borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: 16,
+    borderColor: palette.inputBorder,
+    borderRadius: 18,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 13,
+    fontFamily: 'Manrope_600SemiBold',
     fontSize: 15,
     color: palette.text,
   },
-  statusText: {
-    fontSize: 13,
+  settingsHint: {
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 12,
     lineHeight: 18,
     color: palette.subtleText,
   },
+  inlineAction: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: palette.actionPale,
+  },
+  inlineActionText: {
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 12,
+    color: palette.leafDark,
+  },
+  inlineGhost: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: palette.darkShellBorder,
+  },
+  inlineGhostText: {
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 12,
+    color: palette.card,
+  },
+  cameraCard: {
+    backgroundColor: palette.darkShell,
+    borderRadius: 30,
+    padding: 18,
+    gap: 14,
+    shadowColor: '#09120F',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    elevation: 8,
+  },
   cameraShell: {
-    height: 360,
+    height: 430,
     overflow: 'hidden',
-    borderRadius: 24,
-    backgroundColor: '#1a1a1a',
+    borderRadius: 26,
+    position: 'relative',
+    backgroundColor: '#0B1310',
   },
   cameraPreview: {
     flex: 1,
+  },
+  cameraOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  cameraOverlayTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  cameraOverlayBottom: {
+    alignItems: 'center',
+  },
+  cameraHint: {
+    fontFamily: 'Manrope_600SemiBold',
+    fontSize: 13,
+    color: '#F2F0E8',
+    textAlign: 'center',
+    backgroundColor: 'rgba(5, 10, 8, 0.34)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
   },
   centerState: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
-    gap: 12,
+    padding: 26,
+    gap: 14,
   },
   stateTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 22,
+    color: '#F9F6F0',
     textAlign: 'center',
   },
   stateText: {
+    fontFamily: 'Manrope_500Medium',
     fontSize: 14,
-    lineHeight: 20,
-    color: '#D3D3D3',
+    lineHeight: 21,
+    color: '#D7DBD4',
     textAlign: 'center',
   },
-  actionRow: {
+  permissionButton: {
+    backgroundColor: '#F0E7D5',
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  permissionButtonText: {
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 14,
+    color: palette.darkShell,
+  },
+  captureRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 12,
   },
-  actionButton: {
+  minorButton: {
     flex: 1,
-  },
-  primaryButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: palette.leaf,
-    borderRadius: 16,
     minHeight: 54,
-    paddingHorizontal: 14,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: palette.secondary,
-    borderRadius: 16,
-    minHeight: 50,
-    paddingHorizontal: 14,
-  },
-  secondaryButtonText: {
-    color: palette.text,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  analyzeButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: palette.earth,
     borderRadius: 18,
-    minHeight: 56,
-    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: palette.darkShellBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
   },
-  analyzeButtonText: {
-    color: '#FFFFFF',
+  minorButtonText: {
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 14,
+    color: '#F5F2EA',
+  },
+  captureButton: {
+    width: 88,
+    height: 88,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F2E8D8',
+  },
+  captureButtonInner: {
+    width: 68,
+    height: 68,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.captureInner,
+  },
+  captureButtonText: {
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 12,
+    color: '#FFF8F0',
+  },
+  primaryAction: {
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  primaryActionFill: {
+    minHeight: 58,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+    paddingHorizontal: 18,
+  },
+  primaryActionText: {
+    fontFamily: 'Manrope_800ExtraBold',
     fontSize: 16,
-    fontWeight: '800',
+    color: '#FFFFFF',
   },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.55,
   },
-  resultCard: {
-    backgroundColor: palette.resultCard,
-    borderRadius: 24,
+  resultStack: {
+    gap: 14,
+  },
+  resultHero: {
+    borderRadius: 28,
     padding: 20,
-    gap: 10,
     borderWidth: 1,
-    borderColor: palette.resultBorder,
+    gap: 14,
   },
-  resultLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: palette.leafDark,
+  resultHeroTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  resultBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  resultBadgeText: {
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  resultTitle: {
-    fontSize: 28,
-    fontWeight: '800',
+  resultSourceChip: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+  },
+  resultSourceText: {
+    fontFamily: 'Manrope_700Bold',
+    fontSize: 12,
     color: palette.text,
   },
-  resultMeta: {
+  resultTitle: {
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 30,
+    color: palette.text,
+  },
+  resultSubtitle: {
+    fontFamily: 'Manrope_500Medium',
     fontSize: 14,
+    lineHeight: 21,
     color: palette.subtleText,
   },
-  adviceTitle: {
-    marginTop: 6,
-    fontSize: 15,
-    fontWeight: '700',
+  metricRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  metricCard: {
+    flexGrow: 1,
+    minWidth: 92,
+    backgroundColor: palette.metricCard,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 4,
+  },
+  metricValue: {
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 20,
     color: palette.text,
   },
-  adviceText: {
+  metricLabel: {
+    fontFamily: 'Manrope_600SemiBold',
+    fontSize: 12,
+    color: palette.subtleText,
+  },
+  cardGrid: {
+    gap: 14,
+  },
+  detailCard: {
+    backgroundColor: palette.card,
+    borderRadius: 24,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: palette.border,
+    gap: 10,
+  },
+  detailCardTitle: {
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 18,
+    color: palette.text,
+  },
+  detailCardText: {
+    fontFamily: 'Manrope_500Medium',
     fontSize: 15,
+    lineHeight: 23,
+    color: palette.subtleText,
+  },
+  scoresCard: {
+    backgroundColor: palette.card,
+    borderRadius: 24,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: palette.border,
+    gap: 12,
+  },
+  scoresIntro: {
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 14,
     lineHeight: 21,
     color: palette.subtleText,
   },
@@ -460,19 +887,20 @@ const styles = StyleSheet.create({
   scoreHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 12,
   },
   scoreLabel: {
+    fontFamily: 'Manrope_600SemiBold',
     fontSize: 14,
     color: palette.text,
-    fontWeight: '600',
   },
   scoreValue: {
+    fontFamily: 'Manrope_700Bold',
     fontSize: 14,
     color: palette.subtleText,
-    fontWeight: '700',
   },
   scoreTrack: {
-    height: 9,
+    height: 10,
     borderRadius: 999,
     backgroundColor: palette.track,
     overflow: 'hidden',
@@ -480,6 +908,24 @@ const styles = StyleSheet.create({
   scoreFill: {
     height: '100%',
     borderRadius: 999,
-    backgroundColor: palette.leaf,
+  },
+  placeholderCard: {
+    backgroundColor: palette.card,
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: palette.border,
+    gap: 10,
+  },
+  placeholderTitle: {
+    fontFamily: 'Manrope_800ExtraBold',
+    fontSize: 20,
+    color: palette.text,
+  },
+  placeholderText: {
+    fontFamily: 'Manrope_500Medium',
+    fontSize: 15,
+    lineHeight: 22,
+    color: palette.subtleText,
   },
 });

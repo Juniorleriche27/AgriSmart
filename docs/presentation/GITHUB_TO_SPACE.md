@@ -69,3 +69,34 @@ https://juniorleriche-agrismart-api.hf.space
 ```
 
 ou l'URL publique indiquee par le Space une fois deploye.
+
+## 6. Secret Cohere dans le Space
+
+Si vous voulez un commentaire genere par Cohere :
+
+- ouvrez le Space `Juniorleriche/agrismart-api`
+- ouvrez `Settings`
+- ouvrez `Variables and secrets`
+- ajoutez un secret
+
+Nom :
+
+```text
+COHERE_API_KEY
+```
+
+Valeur :
+
+- collez votre cle API Cohere
+
+Optionnel :
+
+```text
+COHERE_MODEL
+```
+
+Valeur recommandee :
+
+```text
+command-a-03-2025
+```

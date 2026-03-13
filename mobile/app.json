@@ -40,7 +40,8 @@
           "cameraPermission": "AgriSmart utilise la camera pour photographier une feuille de mais et lancer l'analyse.",
           "recordAudioAndroid": false
         }
-      ]
+      ],
+      "expo-font"
     ],
     "web": {
       "favicon": "./assets/favicon.png"

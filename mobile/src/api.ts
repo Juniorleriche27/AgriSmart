@@ -2,6 +2,8 @@ export type HealthResponse = {
   status: string;
   classes: string[];
   input_size: number[];
+  cohere_enabled: boolean;
+  cohere_model: string | null;
 };
 
 export type PredictionResponse = {
@@ -12,6 +14,9 @@ export type PredictionResponse = {
   input_size: number[];
   inference_time_ms: number;
   advice: string;
+  commentary: string;
+  commentary_source: 'cohere' | 'local';
+  cohere_enabled: boolean;
 };
 
 

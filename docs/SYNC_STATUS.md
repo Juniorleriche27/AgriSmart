@@ -50,6 +50,7 @@ Le manifeste associe est :
 - une application `Expo React Native` est presente dans `mobile/`
 - la demo mobile repose sur la camera du telephone et l'endpoint `POST /predict`
 - des fichiers de deploiement en ligne ont ete ajoutes : `railway.json`, `render.yaml`, `requirements.txt`
+- un commentaire optionnel via Cohere est maintenant prevu dans l'API si `COHERE_API_KEY` est defini
 
 ## Point de vigilance
 
