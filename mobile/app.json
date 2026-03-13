@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "AgriSmart",
+    "slug": "agrismart-mobile",
+    "scheme": "agrismart",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "AgriSmart utilise la camera pour photographier une feuille de mais et analyser son etat."
+      }
+    },
+    "android": {
+      "package": "com.dclic.agrismartmobile",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "CAMERA",
+        "android.permission.CAMERA"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "AgriSmart utilise la camera pour photographier une feuille de mais et lancer l'analyse.",
+          "recordAudioAndroid": false
+        }
+      ]
+    ],
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d916900a-3b1c-4cb7-8807-ec2058f84cfb"
+      }
+    },
+    "owner": "juniorleriche"
+  }
+}

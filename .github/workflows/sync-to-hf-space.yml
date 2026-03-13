@@ -1,0 +1,42 @@
+name: Sync To Hugging Face Space
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  sync-to-space:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare Space bundle
+        run: |
+          mkdir -p .hf-space-build/backend
+          mkdir -p .hf-space-build/models/final
+
+          cp -r backend/app .hf-space-build/backend/app
+          cp backend/requirements.txt .hf-space-build/requirements.txt
+          cp deploy/hf-space/Dockerfile .hf-space-build/Dockerfile
+          cp deploy/hf-space/README.md .hf-space-build/README.md
+          cp models/final/agrismart_model_final.tflite .hf-space-build/models/final/agrismart_model_final.tflite
+          cp models/final/model_metadata.json .hf-space-build/models/final/model_metadata.json
+
+      - name: Push to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          cd .hf-space-build
+          git init
+          git checkout -b main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Sync from GitHub"
+          git push --force https://Juniorleriche:${HF_TOKEN}@huggingface.co/spaces/Juniorleriche/agrismart-api main

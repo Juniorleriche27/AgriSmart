@@ -1,0 +1,21 @@
+{
+  "model_name": "agrismart_model_final.tflite",
+  "format": "tflite",
+  "selected_model": "MobileNetV2 finetune",
+  "input_size": [
+    160,
+    160,
+    3
+  ],
+  "runtime_input_shape": [
+    1,
+    160,
+    160,
+    3
+  ],
+  "class_labels": [
+    "common_rust",
+    "healthy",
+    "northern_leaf_blight"
+  ]
+}

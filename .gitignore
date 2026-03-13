@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Node / Expo
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/.git/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Logs and local env
+*.log
+.env
+.env.*
+
+# Build artifacts
+android/
+ios/
+
+# Project data and heavy artifacts
+data/archive/
+data/raw/
+outputs/
+models/archive/
+models/checkpoints/
+models/final/agrismart_model_final.keras
